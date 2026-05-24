@@ -1,0 +1,15 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Local test media & generated exports (don't commit large binaries)
+*.mp4
+*.mov
+*.webm
+dither-hero.html
+
+# ...except the committed demo media used by the README
+!assets/demo.gif

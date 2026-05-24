@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grain & Polaroid Lab</title>
+<style>
+  :root {
+    --bg:#0d0d0f;
+    --panel:#161619;
+    --panel2:#202026;
+    --line:#2a2a30;
+    --txt:#e7e7ea;
+    --mut:#8a8a93;
+    --acc:#5b8cff;
+    --paper:#f4f0e8;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0;
+    font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    background:var(--bg);
+    color:var(--txt);
+    display:flex;
+    height:100vh;
+    overflow:hidden;
+  }
+  #panel {
+    width:330px;
+    flex:none;
+    background:var(--panel);
+    border-right:1px solid var(--line);
+    overflow-y:auto;
+    padding:16px;
+  }
+  #stage {
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+    background:#000 repeating-conic-gradient(#111 0 25%,#181818 0 50%) 0/24px 24px;
+    min-width:0;
+    min-height:0;
+    overflow:hidden;
+  }
+  #canvasWrap {
+    position:relative;
+    width:min(760px, 88%);
+    height:min(560px, 82vh);
+    max-width:100%;
+    max-height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-width:0;
+    min-height:0;
+    padding:18px;
+    border:1px dashed #363641;
+    background:rgba(16,16,18,.72);
+    overflow:hidden;
+  }
+  canvas {
+    display:block;
+    max-width:100%;
+    max-height:100%;
+    width:auto;
+    height:auto;
+    box-shadow:0 0 0 1px var(--line), 0 22px 70px rgba(0,0,0,.32);
+    background:#101012;
+  }
+  #empty {
+    width:100%;
+    height:100%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--mut);
+    text-align:center;
+    padding:24px;
+  }
+  [hidden] {
+    display:none !important;
+  }
+  h1 {
+    font-size:14px;
+    margin:0 0 14px;
+    letter-spacing:.04em;
+  }
+  .grp {
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:12px;
+    margin-bottom:12px;
+  }
+  .grp h2 {
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--mut);
+    margin:0 0 10px;
+  }
+  label {
+    display:block;
+    margin:9px 0 3px;
+    color:var(--mut);
+    font-size:11px;
+  }
+  .row {
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .row label {
+    margin:0;
+    flex:1;
+  }
+  input[type=range] {
+    width:100%;
+    accent-color:var(--acc);
+  }
+  input[type=file] {
+    width:100%;
+    font-size:11px;
+    color:var(--mut);
+  }
+  input[type=color] {
+    width:34px;
+    height:26px;
+    padding:0;
+    border:1px solid var(--line);
+    background:none;
+    border-radius:4px;
+  }
+  input[type=text], select, button {
+    background:var(--panel2);
+    color:var(--txt);
+    border:1px solid var(--line);
+    border-radius:5px;
+    padding:6px 8px;
+    font:inherit;
+  }
+  button {
+    cursor:pointer;
+  }
+  button:hover {
+    border-color:var(--acc);
+  }
+  button:disabled {
+    opacity:.45;
+    cursor:not-allowed;
+  }
+  .seg {
+    display:flex;
+    gap:0;
+  }
+  .seg button {
+    flex:1;
+    border-radius:0;
+    min-height:31px;
+  }
+  .seg button:first-child { border-radius:5px 0 0 5px; }
+  .seg button:last-child { border-radius:0 5px 5px 0; }
+  .seg button.on {
+    background:var(--acc);
+    border-color:var(--acc);
+    color:#fff;
+  }
+  .val {
+    color:var(--txt);
+    font-variant-numeric:tabular-nums;
+    min-width:44px;
+    text-align:right;
+  }
+  .hint {
+    color:var(--mut);
+    font-size:10px;
+    margin-top:6px;
+  }
+  .full {
+    width:100%;
+    margin-top:8px;
+  }
+  .swatches {
+    display:grid;
+    grid-template-columns:repeat(4, 1fr);
+    gap:6px;
+    margin-top:8px;
+  }
+  .swatch {
+    min-height:28px;
+    border-radius:5px;
+    border:1px solid var(--line);
+  }
+  .swatch.on {
+    border-color:var(--acc);
+    box-shadow:0 0 0 1px var(--acc) inset;
+  }
+  @media (max-width:760px) {
+    body {
+      display:block;
+      height:auto;
+      overflow:auto;
+    }
+    #panel {
+      width:auto;
+      border-right:0;
+      border-bottom:1px solid var(--line);
+    }
+    #stage {
+      min-height:62vh;
+      height:62vh;
+      padding:16px;
+    }
+    #canvasWrap {
+      width:100%;
+      height:100%;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>GRAIN & POLAROID LAB</h1>
+
+  <div class="grp">
+    <h2>Source</h2>
+    <input type="file" id="file" accept="image/*" />
+    <div class="hint">Drop in any normal image. Everything renders locally in your browser.</div>
+  </div>
+
+  <div class="grp">
+    <h2>Grainy noise</h2>
+    <div class="row"><label>Enable grain</label><input type="checkbox" id="grainOn" checked /></div>
+    <div class="row"><label>Amount</label><span class="val" id="grainAmountV">26%</span></div>
+    <input type="range" id="grainAmount" min="0" max="70" value="26" />
+    <div class="row"><label>Size</label><span class="val" id="grainSizeV">1 px</span></div>
+    <input type="range" id="grainSize" min="1" max="6" value="1" />
+    <div class="row"><label>Mono grain</label><input type="checkbox" id="monoGrain" checked /></div>
+  </div>
+
+  <div class="grp">
+    <h2>Polaroid frame</h2>
+    <div class="row"><label>Enable frame</label><input type="checkbox" id="polaroidOn" /></div>
+    <div class="row" style="margin-top:10px"><label>Paper color</label><input type="color" id="paper" value="#f4f0e8" /></div>
+    <div class="row"><label>Side thickness</label><span class="val" id="borderV">8%</span></div>
+    <input type="range" id="border" min="3" max="28" value="8" />
+    <div class="row"><label>Bottom lip</label><span class="val" id="lipV">20%</span></div>
+    <input type="range" id="lip" min="8" max="42" value="20" />
+    <div class="row"><label>Tilt</label><span class="val" id="tiltV">-1 deg</span></div>
+    <input type="range" id="tilt" min="-8" max="8" value="-1" />
+    <div class="hint">The frame keeps the image ratio intact and only adds paper around it.</div>
+  </div>
+
+  <div class="grp">
+    <h2>Image tone</h2>
+    <div class="row"><label>Exposure</label><span class="val" id="exposureV">4%</span></div>
+    <input type="range" id="exposure" min="-30" max="30" value="4" />
+    <div class="row"><label>Contrast</label><span class="val" id="contrastV">8%</span></div>
+    <input type="range" id="contrast" min="-30" max="45" value="8" />
+    <div class="row"><label>Fade</label><span class="val" id="fadeV">10%</span></div>
+    <input type="range" id="fade" min="0" max="40" value="10" />
+    <div class="row"><label>Warmth</label><span class="val" id="warmthV">7%</span></div>
+    <input type="range" id="warmth" min="-25" max="25" value="7" />
+  </div>
+
+  <div class="grp">
+    <h2>Background</h2>
+    <div class="row"><label>Stage color</label><input type="color" id="stageColor" value="#0d0d0f" /></div>
+    <div class="swatches" id="swatches">
+      <button class="swatch on" data-v="#0d0d0f" style="background:#0d0d0f" title="Black"></button>
+      <button class="swatch" data-v="#1d2027" style="background:#1d2027" title="Graphite"></button>
+      <button class="swatch" data-v="#e6e0d5" style="background:#e6e0d5" title="Warm paper"></button>
+      <button class="swatch" data-v="#b8c2d3" style="background:#b8c2d3" title="Blue gray"></button>
+    </div>
+  </div>
+
+  <div class="grp">
+    <h2>Export</h2>
+    <button id="download" class="full" disabled>Download PNG</button>
+    <button id="reset" class="full">Reset controls</button>
+  </div>
+</div>
+
+<div id="stage">
+  <div id="canvasWrap">
+    <div id="empty">Upload an image to preview grain and Polaroid framing.</div>
+    <canvas id="out" hidden></canvas>
+  </div>
+</div>
+
+<script>
+const S = {
+  grainOn:true,
+  grainAmount:26,
+  grainSize:1,
+  monoGrain:true,
+  polaroidOn:false,
+  paper:'#f4f0e8',
+  border:8,
+  lip:20,
+  tilt:-1,
+  exposure:4,
+  contrast:8,
+  fade:10,
+  warmth:7,
+  stageColor:'#0d0d0f'
+};
+
+const out = document.getElementById('out');
+const ctx = out.getContext('2d', { willReadFrequently:true });
+const work = document.createElement('canvas');
+const wctx = work.getContext('2d', { willReadFrequently:true });
+const empty = document.getElementById('empty');
+const downloadBtn = document.getElementById('download');
+let img = null;
+
+function clamp(v) {
+  return Math.max(0, Math.min(255, v));
+}
+
+function seededNoise(x, y, seed) {
+  let n = x * 374761393 + y * 668265263 + seed * 2246822519;
+  n = (n ^ (n >>> 13)) * 1274126177;
+  return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
+}
+
+function tonePixel(r, g, b) {
+  const exposure = S.exposure * 1.9;
+  const contrast = 1 + S.contrast / 90;
+  const fade = S.fade / 100;
+  r = (r - 128) * contrast + 128 + exposure + S.warmth * 1.4;
+  g = (g - 128) * contrast + 128 + exposure + S.warmth * .45;
+  b = (b - 128) * contrast + 128 + exposure - S.warmth * .9;
+  r = r * (1 - fade) + 232 * fade;
+  g = g * (1 - fade) + 225 * fade;
+  b = b * (1 - fade) + 207 * fade;
+  return [clamp(r), clamp(g), clamp(b)];
+}
+
+function processImage(targetW, targetH, crop) {
+  work.width = targetW;
+  work.height = targetH;
+  wctx.clearRect(0, 0, targetW, targetH);
+  wctx.drawImage(img, crop.x, crop.y, crop.w, crop.h, 0, 0, targetW, targetH);
+  const pixels = wctx.getImageData(0, 0, targetW, targetH);
+  const d = pixels.data;
+  const grain = S.grainOn ? S.grainAmount * 1.55 : 0;
+  const step = Math.max(1, S.grainSize);
+  const seed = 19;
+  for (let y = 0; y < targetH; y++) {
+    for (let x = 0; x < targetW; x++) {
+      const i = (y * targetW + x) * 4;
+      let r = d[i], g = d[i + 1], b = d[i + 2];
+      [r, g, b] = tonePixel(r, g, b);
+      if (grain) {
+        const gx = Math.floor(x / step);
+        const gy = Math.floor(y / step);
+        if (S.monoGrain) {
+          const n = (seededNoise(gx, gy, seed) - .5) * grain;
+          r += n; g += n; b += n;
+        } else {
+          r += (seededNoise(gx, gy, seed) - .5) * grain;
+          g += (seededNoise(gx, gy, seed + 7) - .5) * grain;
+          b += (seededNoise(gx, gy, seed + 13) - .5) * grain;
+        }
+      }
+      d[i] = clamp(r);
+      d[i + 1] = clamp(g);
+      d[i + 2] = clamp(b);
+    }
+  }
+  wctx.putImageData(pixels, 0, 0);
+}
+
+function drawShadow(x, y, w, h, tilt) {
+  ctx.save();
+  ctx.translate(out.width / 2, out.height / 2);
+  ctx.rotate(tilt);
+  ctx.translate(-out.width / 2, -out.height / 2);
+  ctx.shadowColor = 'rgba(0,0,0,.42)';
+  ctx.shadowBlur = Math.max(28, Math.round(w * .045));
+  ctx.shadowOffsetY = Math.max(18, Math.round(h * .035));
+  ctx.fillStyle = 'rgba(0,0,0,.55)';
+  ctx.fillRect(x, y, w, h);
+  ctx.restore();
+}
+
+function render() {
+  if (!img) return;
+  const baseRatio = img.naturalWidth / img.naturalHeight;
+  const crop = { x:0, y:0, w:img.naturalWidth, h:img.naturalHeight };
+  const maxImage = 1200;
+  let imageW, imageH;
+  if (baseRatio >= 1) {
+    imageW = maxImage;
+    imageH = Math.round(maxImage / baseRatio);
+  } else {
+    imageH = maxImage;
+    imageW = Math.round(maxImage * baseRatio);
+  }
+  processImage(imageW, imageH, crop);
+
+  if (S.polaroidOn) {
+    const border = Math.round(Math.min(imageW, imageH) * S.border / 100);
+    const lip = Math.round(imageH * S.lip / 100);
+    const paperW = imageW + border * 2;
+    const paperH = imageH + border + lip;
+    const pad = Math.round(Math.max(paperW, paperH) * .14);
+    out.width = paperW + pad * 2;
+    out.height = paperH + pad * 2;
+    ctx.fillStyle = S.stageColor;
+    ctx.fillRect(0, 0, out.width, out.height);
+    const x = pad;
+    const y = pad;
+    const tilt = S.tilt * Math.PI / 180;
+    drawShadow(x, y, paperW, paperH, tilt);
+    ctx.save();
+    ctx.translate(out.width / 2, out.height / 2);
+    ctx.rotate(tilt);
+    ctx.translate(-out.width / 2, -out.height / 2);
+    ctx.fillStyle = S.paper;
+    ctx.fillRect(x, y, paperW, paperH);
+    ctx.drawImage(work, x + border, y + border, imageW, imageH);
+    ctx.fillStyle = 'rgba(255,255,255,.12)';
+    ctx.fillRect(x + border, y + border, imageW, Math.max(1, imageH * .035));
+    ctx.restore();
+  } else {
+    out.width = imageW;
+    out.height = imageH;
+    ctx.fillStyle = S.stageColor;
+    ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(work, 0, 0);
+  }
+}
+
+function updateStage() {
+  document.getElementById('stage').style.background =
+    `${S.stageColor} repeating-conic-gradient(rgba(255,255,255,.035) 0 25%, rgba(255,255,255,.06) 0 50%) 0/24px 24px`;
+}
+
+function setVal(id, val, suffix = '') {
+  const v = document.getElementById(id + 'V');
+  if (v) v.textContent = val + suffix;
+}
+
+function syncLabels() {
+  setVal('grainAmount', S.grainAmount, '%');
+  setVal('grainSize', S.grainSize, ' px');
+  setVal('border', S.border, '%');
+  setVal('lip', S.lip, '%');
+  setVal('tilt', S.tilt, ' deg');
+  setVal('exposure', S.exposure, '%');
+  setVal('contrast', S.contrast, '%');
+  setVal('fade', S.fade, '%');
+  setVal('warmth', S.warmth, '%');
+}
+
+function bindRange(id, key) {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    S[key] = +el.value;
+    if (['border','lip','tilt'].includes(key)) enablePolaroidFrame();
+    syncLabels();
+    render();
+  });
+}
+
+function bindCheck(id, key) {
+  document.getElementById(id).addEventListener('change', e => {
+    S[key] = e.target.checked;
+    render();
+  });
+}
+
+['grainAmount','grainSize','border','lip','tilt','exposure','contrast','fade','warmth']
+  .forEach(id => bindRange(id, id));
+bindCheck('grainOn', 'grainOn');
+bindCheck('monoGrain', 'monoGrain');
+bindCheck('polaroidOn', 'polaroidOn');
+
+document.getElementById('paper').addEventListener('input', e => {
+  S.paper = e.target.value;
+  enablePolaroidFrame();
+  render();
+});
+
+function enablePolaroidFrame() {
+  if (S.polaroidOn) return;
+  S.polaroidOn = true;
+  document.getElementById('polaroidOn').checked = true;
+}
+
+document.getElementById('stageColor').addEventListener('input', e => {
+  S.stageColor = e.target.value;
+  updateStage();
+  render();
+});
+
+document.getElementById('swatches').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  document.querySelectorAll('.swatch').forEach(s => s.classList.remove('on'));
+  b.classList.add('on');
+  S.stageColor = b.dataset.v;
+  document.getElementById('stageColor').value = S.stageColor;
+  updateStage();
+  render();
+});
+
+document.getElementById('file').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  const next = new Image();
+  next.onload = () => {
+    img = next;
+    URL.revokeObjectURL(url);
+    empty.hidden = true;
+    out.hidden = false;
+    downloadBtn.disabled = false;
+    render();
+  };
+  next.src = url;
+});
+
+document.getElementById('download').addEventListener('click', () => {
+  if (!img) return;
+  const a = document.createElement('a');
+  a.href = out.toDataURL('image/png');
+  a.download = 'grain-polaroid.png';
+  a.click();
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+  Object.assign(S, {
+    grainOn:true, grainAmount:26, grainSize:1, monoGrain:true,
+    polaroidOn:false, paper:'#f4f0e8',
+    border:8, lip:20, tilt:-1, exposure:4, contrast:8,
+    fade:10, warmth:7, stageColor:'#0d0d0f'
+  });
+  for (const key of ['grainAmount','grainSize','border','lip','tilt','exposure','contrast','fade','warmth']) {
+    document.getElementById(key).value = S[key];
+  }
+  for (const key of ['grainOn','monoGrain','polaroidOn']) document.getElementById(key).checked = S[key];
+  document.getElementById('paper').value = S.paper;
+  document.getElementById('stageColor').value = S.stageColor;
+  document.querySelectorAll('.swatch').forEach(btn => btn.classList.toggle('on', btn.dataset.v === S.stageColor));
+  syncLabels();
+  updateStage();
+  render();
+});
+
+syncLabels();
+updateStage();
+</script>
+</body>
+</html>

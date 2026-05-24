@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SVG Dither Filter</title>
+<style>
+  :root { --bg:#0d0d0f; --panel:#161619; --line:#2a2a30; --txt:#e7e7ea; --mut:#8a8a93; --acc:#5b8cff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+         background:var(--bg); color:var(--txt); display:flex; height:100vh; overflow:hidden; }
+  #panel { width:330px; flex:none; background:var(--panel); border-right:1px solid var(--line);
+           overflow-y:auto; padding:16px; }
+  #stage { flex:1; display:flex; align-items:center; justify-content:center; padding:24px;
+           background:#000 repeating-conic-gradient(#111 0 25%,#181818 0 50%) 0/24px 24px;
+           min-width:0; min-height:0; overflow:hidden; }
+  #canvasWrap { width:min(760px,88%); height:min(560px,82vh); max-width:100%; max-height:100%;
+                display:flex; align-items:center; justify-content:center; padding:18px;
+                border:1px dashed #363641; background:rgba(16,16,18,.72); overflow:hidden; }
+  canvas { display:block; max-width:100%; max-height:100%; width:auto; height:auto;
+           box-shadow:0 0 0 1px var(--line); }
+  h1 { font-size:14px; margin:0 0 14px; letter-spacing:.04em; }
+  .grp { border:1px solid var(--line); border-radius:8px; padding:12px; margin-bottom:12px; }
+  .grp h2 { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:var(--mut);
+            margin:0 0 10px; }
+  label { display:block; margin:9px 0 3px; color:var(--mut); font-size:11px; }
+  .row { display:flex; align-items:center; gap:8px; }
+  .row label { margin:0; flex:1; }
+  input[type=range] { width:100%; accent-color:var(--acc); }
+  input[type=file] { width:100%; font-size:11px; color:var(--mut); }
+  input[type=color] { width:34px; height:26px; padding:0; border:1px solid var(--line);
+                       background:none; border-radius:4px; }
+  select, button { background:#202026; color:var(--txt); border:1px solid var(--line);
+                    border-radius:5px; padding:6px 8px; font:inherit; }
+  button { cursor:pointer; }
+  button:hover { border-color:var(--acc); }
+  .seg { display:flex; gap:0; }
+  .seg button { flex:1; border-radius:0; }
+  .seg button:first-child{border-radius:5px 0 0 5px;}
+  .seg button:last-child{border-radius:0 5px 5px 0;}
+  .seg button.on { background:var(--acc); border-color:var(--acc); color:#fff; }
+  .val { color:var(--txt); font-variant-numeric:tabular-nums; min-width:38px; text-align:right; }
+  .svgrow { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+  .svgrow span { width:62px; font-size:10px; color:var(--mut); }
+  .svgrow input[type=file]{ flex:1; }
+  .hint { color:var(--mut); font-size:10px; margin-top:6px; }
+</style>
+</head>
+<body>
+<div id="panel">
+  <h1>SVG DITHER FILTER</h1>
+
+  <div class="grp">
+    <h2>Source</h2>
+    <input type="file" id="media" accept="image/*,video/*" />
+    <label>Aspect ratio</label>
+    <div class="seg" id="aspect">
+      <button data-v="orig" class="on">Original</button>
+      <button data-v="square">1 : 1</button>
+    </div>
+  </div>
+
+  <div class="grp">
+    <h2>Grid</h2>
+    <div class="row"><label>Resolution</label><span class="val" id="gridV">64</span></div>
+    <input type="range" id="grid" min="4" max="160" value="64" />
+    <div class="row" style="margin-top:10px"><label>Background</label>
+      <input type="color" id="bg" value="#ffffff" /></div>
+  </div>
+
+  <div class="grp">
+    <h2>Tone mapping</h2>
+    <div class="row"><label>Invert</label>
+      <input type="checkbox" id="invert" /></div>
+    <label>Shape mode</label>
+    <div class="seg" id="mode">
+      <button data-v="tone" class="on">Per-tone (7)</button>
+      <button data-v="single">Single</button>
+    </div>
+    <div id="singleWrap" style="display:none">
+      <label>Use shape</label>
+      <select id="singleSel">
+        <option value="0">1 · Shadow</option><option value="1">2</option>
+        <option value="2">3</option><option value="3">4 · Mid</option>
+        <option value="4">5</option><option value="5">6</option>
+        <option value="6">7 · Highlight</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grp">
+    <h2>Shape scale (midtone min → max)</h2>
+    <div class="row"><label>Min</label><span class="val" id="sMinV">10%</span></div>
+    <input type="range" id="sMin" min="0" max="150" value="10" />
+    <div class="row"><label>Max</label><span class="val" id="sMaxV">100%</span></div>
+    <input type="range" id="sMax" min="0" max="200" value="100" />
+  </div>
+
+  <div class="grp">
+    <h2>Pixel rotation</h2>
+    <div class="row"><label>Angle (90° snap)</label><span class="val" id="rotV">0°</span></div>
+    <input type="range" id="rot" min="0" max="270" step="90" value="0" />
+    <div class="row" style="margin-top:8px"><label>Random 90° per cell</label>
+      <input type="checkbox" id="rndRot" /></div>
+  </div>
+
+  <div class="grp">
+    <h2>Shapes — shadow → highlight</h2>
+    <div id="svgList"></div>
+    <div class="hint">Upload up to 7 SVGs. Empty slots fall back to a circle. Slot 1 = darkest, slot 7 = brightest.</div>
+  </div>
+
+  <div class="grp">
+    <h2>Hero export</h2>
+    <label>Hero video URL (for HTML export)</label>
+    <input type="text" id="vidUrl" placeholder="video.mp4 or https://..." style="width:100%;background:#202026;color:var(--txt);border:1px solid var(--line);border-radius:5px;padding:6px 8px;font:inherit" />
+    <button id="exportHtmlBtn" style="width:100%;margin-top:8px">Download HTML hero</button>
+    <button id="exportBtn" style="width:100%;margin-top:6px">Copy config for React hero</button>
+    <div class="hint">HTML = drop-in standalone page. JSON = paste back to Claude for a &lt;DitherHero&gt; React component.</div>
+  </div>
+</div>
+
+<div id="stage"><div id="canvasWrap"><canvas id="out"></canvas></div></div>
+
+<script>
+const RASTER = 96;            // px each shape is rasterised at
+const DEFAULT_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46"/></svg>';
+const TONE_LABELS = ['Shadow','Dark','Low-mid','Mid','High-mid','Light','Highlight'];
+
+const S = {
+  aspect:'orig', grid:64, bg:'#ffffff', invert:false, mode:'tone', single:0,
+  sMin:10, sMax:100, rot:0, rndRot:false,
+  slots: Array.from({length:7}, (_,i)=>({ svg:null, color:'#000000' })),
+};
+const cache = new Array(7).fill(null);   // {key, canvas} rasterised+coloured shape
+
+const out = document.getElementById('out');
+const octx = out.getContext('2d');
+const sample = document.createElement('canvas');
+const sctx = sample.getContext('2d', { willReadFrequently:true });
+
+let media = null;       // HTMLImageElement | HTMLVideoElement
+let isVideo = false;
+
+/* ---------- shape rasterisation ---------- */
+function recolorSVG(svgText, color){
+  const doc = new DOMParser().parseFromString(svgText,'image/svg+xml');
+  const svg = doc.documentElement;
+  if (svg.nodeName.toLowerCase() !== 'svg') return null;
+  svg.querySelectorAll('*').forEach(el=>{
+    if (el.getAttribute('fill') !== 'none') el.removeAttribute('fill');
+    let st = el.getAttribute('style');
+    if (st){ el.setAttribute('style', st.replace(/fill\s*:[^;]+;?/gi,'')); }
+  });
+  let style = doc.createElementNS('http://www.w3.org/2000/svg','style');
+  style.textContent = `*{fill:${color}}`;
+  svg.insertBefore(style, svg.firstChild);
+  return new XMLSerializer().serializeToString(svg);
+}
+
+function buildCache(i){
+  const slot = S.slots[i];
+  const src = slot.svg || DEFAULT_SVG;
+  const key = i+'|'+slot.color+'|'+(slot.svg?1:0);
+  if (cache[i] && cache[i].key === key) return Promise.resolve();
+  const colored = recolorSVG(src, slot.color);
+  if (!colored){ cache[i]=null; return Promise.resolve(); }
+  return new Promise(res=>{
+    const img = new Image();
+    const url = URL.createObjectURL(new Blob([colored],{type:'image/svg+xml'}));
+    img.onload = ()=>{
+      const c = document.createElement('canvas'); c.width=c.height=RASTER;
+      c.getContext('2d').drawImage(img,0,0,RASTER,RASTER);
+      cache[i] = { key, canvas:c };
+      URL.revokeObjectURL(url); res();
+    };
+    img.onerror = ()=>{ cache[i]=null; URL.revokeObjectURL(url); res(); };
+    img.src = url;
+  });
+}
+function rebuildAll(){ return Promise.all(S.slots.map((_,i)=>buildCache(i))); }
+
+/* ---------- render ---------- */
+function srcSize(){
+  if (!media) return [0,0];
+  return isVideo ? [media.videoWidth, media.videoHeight]
+                 : [media.naturalWidth, media.naturalHeight];
+}
+
+function render(){
+  if (!media){ requestAnimationFrame(render); return; }
+  const [sw, sh] = srcSize();
+  if (!sw || !sh){ requestAnimationFrame(render); return; }
+
+  // crop rect on the source
+  let cx=0, cy=0, cw=sw, ch=sh;
+  if (S.aspect === 'square'){
+    const m = Math.min(sw,sh); cx=(sw-m)/2; cy=(sh-m)/2; cw=ch=m;
+  }
+  const ar = cw/ch;
+  const cols = S.grid;
+  const rows = Math.max(1, Math.round(cols/ar));
+
+  // output resolution
+  const maxDim = 960;
+  const cell = Math.max(2, Math.floor((ar>=1 ? maxDim : maxDim*ar)/cols));
+  out.width = cols*cell; out.height = rows*cell;
+
+  // sample down
+  sample.width=cols; sample.height=rows;
+  sctx.clearRect(0,0,cols,rows);
+  sctx.drawImage(media, cx,cy,cw,ch, 0,0,cols,rows);
+  const data = sctx.getImageData(0,0,cols,rows).data;
+
+  octx.fillStyle = S.bg;
+  octx.fillRect(0,0,out.width,out.height);
+
+  const minS = S.sMin/100, maxS = S.sMax/100;
+  for (let y=0;y<rows;y++){
+    for (let x=0;x<cols;x++){
+      const p=(y*cols+x)*4;
+      const a=data[p+3]/255;
+      let lum=(0.299*data[p]+0.587*data[p+1]+0.114*data[p+2])/255;
+      lum*=a;                                  // treat transparent as dark
+      let t = lum;
+      if (S.invert) t = 1-t;
+
+      const bucket = Math.min(6, Math.max(0, Math.floor(t*7)));
+      const idx = S.mode==='single' ? S.single : bucket;
+      const shp = cache[idx]; if (!shp) continue;
+
+      const scale = (minS + (maxS-minS)*t) * cell;
+      if (scale <= 0.4) continue;
+
+      let ang = S.rot;
+      if (S.rndRot) ang = (((x*73856093) ^ (y*19349663)) >>> 0) % 4 * 90;
+
+      const ccx = x*cell + cell/2, ccy = y*cell + cell/2;
+      octx.save();
+      octx.translate(ccx, ccy);
+      if (ang) octx.rotate(ang*Math.PI/180);
+      octx.drawImage(shp.canvas, -scale/2, -scale/2, scale, scale);
+      octx.restore();
+    }
+  }
+  requestAnimationFrame(render);
+}
+
+/* ---------- media loading ---------- */
+document.getElementById('media').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const url = URL.createObjectURL(f);
+  if (f.type.startsWith('video')){
+    const v=document.createElement('video');
+    v.src=url; v.loop=true; v.muted=true; v.playsInline=true;
+    v.onloadeddata=()=>{ media=v; isVideo=true; v.play(); };
+  } else {
+    const img=new Image();
+    img.onload=()=>{ media=img; isVideo=false; };
+    img.src=url;
+  }
+});
+
+/* ---------- controls ---------- */
+function bindSeg(id, key){
+  document.getElementById(id).addEventListener('click', e=>{
+    const b=e.target.closest('button'); if(!b) return;
+    [...e.currentTarget.children].forEach(c=>c.classList.remove('on'));
+    b.classList.add('on'); S[key]=b.dataset.v;
+    if (key==='mode')
+      document.getElementById('singleWrap').style.display = S.mode==='single'?'block':'none';
+  });
+}
+bindSeg('aspect','aspect'); bindSeg('mode','mode');
+
+const rng = (id,key,fmt,after)=>{
+  const el=document.getElementById(id), v=document.getElementById(id+'V');
+  const upd=()=>{ S[key]=+el.value; if(v)v.textContent=fmt(el.value); after&&after(); };
+  el.addEventListener('input',upd); upd();
+};
+rng('grid','grid',x=>x);
+rng('sMin','sMin',x=>x+'%');
+rng('sMax','sMax',x=>x+'%');
+rng('rot','rot',x=>x+'°');
+
+document.getElementById('bg').addEventListener('input',e=>S.bg=e.target.value);
+document.getElementById('invert').addEventListener('change',e=>S.invert=e.target.checked);
+document.getElementById('rndRot').addEventListener('change',e=>S.rndRot=e.target.checked);
+document.getElementById('singleSel').addEventListener('change',e=>S.single=+e.target.value);
+
+/* ---------- 7 shape slots ---------- */
+const list=document.getElementById('svgList');
+S.slots.forEach((slot,i)=>{
+  const row=document.createElement('div'); row.className='svgrow';
+  row.innerHTML=`<span>${i+1} · ${TONE_LABELS[i]}</span>
+    <input type="file" accept=".svg,image/svg+xml" data-i="${i}" />
+    <input type="color" value="#000000" data-i="${i}" />`;
+  list.appendChild(row);
+  // stagger default colours shadow→highlight (dark→light grey) for instant feedback
+  const g = Math.round(i/6*210);
+  slot.color = '#'+g.toString(16).padStart(2,'0').repeat(3);
+  row.querySelector('input[type=color]').value = slot.color;
+});
+list.addEventListener('change', async e=>{
+  const i=+e.target.dataset.i;
+  if (e.target.type==='file'){
+    const f=e.target.files[0]; if(!f) return;
+    S.slots[i].svg = await f.text();
+  } else { S.slots[i].color = e.target.value; }
+  await buildCache(i);
+});
+
+/* ---------- export config ---------- */
+document.getElementById('exportBtn').addEventListener('click', e=>{
+  const cfg = {
+    aspect:S.aspect, grid:S.grid, bg:S.bg, invert:S.invert, mode:S.mode,
+    single:S.single, sMin:S.sMin, sMax:S.sMax, rot:S.rot, rndRot:S.rndRot,
+    slots:S.slots.map(s=>({ color:s.color, svg:s.svg }))   // svg = null → built-in circle
+  };
+  const json = JSON.stringify(cfg);
+  navigator.clipboard.writeText(json).then(
+    ()=>{ e.target.textContent='Copied ✓ — paste to Claude'; setTimeout(()=>e.target.textContent='Copy config for React hero',2000); },
+    ()=>{ prompt('Copy this config:', json); }
+  );
+});
+
+function currentCfg(){
+  return {
+    aspect:S.aspect, grid:S.grid, bg:S.bg, invert:S.invert, mode:S.mode,
+    single:S.single, sMin:S.sMin, sMax:S.sMax, rot:S.rot, rndRot:S.rndRot,
+    slots:S.slots.map(s=>({ color:s.color, svg:s.svg }))
+  };
+}
+
+document.getElementById('exportHtmlBtn').addEventListener('click', ()=>{
+  const cfg = currentCfg();
+  const vid = document.getElementById('vidUrl').value.trim() || 'video.mp4';
+  const html = heroHTML(cfg, vid);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([html],{type:'text/html'}));
+  a.download = 'dither-hero.html'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+});
+
+function heroHTML(cfg, videoUrl){
+  const DEF = DEFAULT_SVG;
+  // self-contained hero: covers its section, video source dithered, content overlaid
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Hero</title>
+<style>
+*{box-sizing:border-box;margin:0}
+.dither-hero{position:relative;width:100%;height:100vh;overflow:hidden;background:${cfg.bg}}
+.dither-hero canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dither-hero .content{position:relative;z-index:1;height:100%;display:flex;
+ flex-direction:column;align-items:center;justify-content:center;text-align:center;
+ color:#fff;font:600 clamp(28px,6vw,72px)/1.1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+ mix-blend-mode:difference;padding:24px}
+.dither-hero p{font-size:clamp(13px,1.6vw,18px);font-weight:400;margin-top:16px;opacity:.85}
+</style></head><body>
+<section class="dither-hero" id="hero">
+  <canvas id="dcanvas"></canvas>
+  <div class="content">
+    <h1>Your headline here</h1>
+    <p>Edit this markup — the dither layer sits behind it.</p>
+  </div>
+</section>
+<script>
+const CFG=${JSON.stringify(cfg)};
+const DEFAULT_SVG=${JSON.stringify(DEF)};
+const VIDEO=${JSON.stringify(videoUrl)};
+const RASTER=96;
+const cv=document.getElementById('dcanvas'),cx=cv.getContext('2d');
+const sm=document.createElement('canvas'),sc=sm.getContext('2d',{willReadFrequently:true});
+const cache=new Array(7).fill(null);
+function recolor(t,c){const d=new DOMParser().parseFromString(t,'image/svg+xml');
+ const s=d.documentElement;if(s.nodeName.toLowerCase()!=='svg')return null;
+ s.querySelectorAll('*').forEach(e=>{if(e.getAttribute('fill')!=='none')e.removeAttribute('fill');
+ let st=e.getAttribute('style');if(st)e.setAttribute('style',st.replace(/fill\\s*:[^;]+;?/gi,''));});
+ const y=d.createElementNS('http://www.w3.org/2000/svg','style');y.textContent='*{fill:'+c+'}';
+ s.insertBefore(y,s.firstChild);return new XMLSerializer().serializeToString(s);}
+function build(i){return new Promise(r=>{const sl=CFG.slots[i];const src=sl.svg||DEFAULT_SVG;
+ const col=recolor(src,sl.color);if(!col){cache[i]=null;return r();}
+ const im=new Image();const u=URL.createObjectURL(new Blob([col],{type:'image/svg+xml'}));
+ im.onload=()=>{const c=document.createElement('canvas');c.width=c.height=RASTER;
+ c.getContext('2d').drawImage(im,0,0,RASTER,RASTER);cache[i]={canvas:c};URL.revokeObjectURL(u);r();};
+ im.onerror=()=>{cache[i]=null;URL.revokeObjectURL(u);r();};im.src=u;});}
+const vid=document.createElement('video');
+vid.src=VIDEO;vid.loop=true;vid.muted=true;vid.playsInline=true;vid.autoplay=true;
+let ready=false;vid.addEventListener('loadeddata',()=>{ready=true;vid.play();});
+let visible=true;
+new IntersectionObserver(es=>{visible=es[0].isIntersecting;
+ if(visible)vid.play();else vid.pause();},{threshold:0}).observe(document.getElementById('hero'));
+function frame(){requestAnimationFrame(frame);
+ if(!ready||!visible)return;const sw=vid.videoWidth,sh=vid.videoHeight;if(!sw||!sh)return;
+ let X=0,Y=0,W=sw,H=sh;
+ if(CFG.aspect==='square'){const m=Math.min(sw,sh);X=(sw-m)/2;Y=(sh-m)/2;W=H=m;}
+ const r=cv.clientWidth/cv.clientHeight||W/H;const cols=CFG.grid;
+ const rows=Math.max(1,Math.round(cols/r));
+ const cell=Math.max(2,Math.floor((r>=1?960:960*r)/cols));
+ cv.width=cols*cell;cv.height=rows*cell;
+ sm.width=cols;sm.height=rows;sc.clearRect(0,0,cols,rows);
+ sc.drawImage(vid,X,Y,W,H,0,0,cols,rows);
+ const d=sc.getImageData(0,0,cols,rows).data;
+ cx.fillStyle=CFG.bg;cx.fillRect(0,0,cv.width,cv.height);
+ const mn=CFG.sMin/100,mx=CFG.sMax/100;
+ for(let y=0;y<rows;y++)for(let x=0;x<cols;x++){const p=(y*cols+x)*4;
+ const a=d[p+3]/255;let l=(0.299*d[p]+0.587*d[p+1]+0.114*d[p+2])/255*a;
+ let t=CFG.invert?1-l:l;const b=Math.min(6,Math.max(0,Math.floor(t*7)));
+ const idx=CFG.mode==='single'?CFG.single:b;const sh=cache[idx];if(!sh)continue;
+ const sz=(mn+(mx-mn)*t)*cell;if(sz<=0.4)continue;
+ let ang=CFG.rot;if(CFG.rndRot)ang=(((x*73856093)^(y*19349663))>>>0)%4*90;
+ cx.save();cx.translate(x*cell+cell/2,y*cell+cell/2);
+ if(ang)cx.rotate(ang*Math.PI/180);cx.drawImage(sh.canvas,-sz/2,-sz/2,sz,sz);cx.restore();}}
+Promise.all(CFG.slots.map((_,i)=>build(i))).then(()=>requestAnimationFrame(frame));
+<\/script></body></html>`;
+}
+
+/* ---------- go ---------- */
+rebuildAll().then(()=>requestAnimationFrame(render));
+</script>
+</body>
+</html>
