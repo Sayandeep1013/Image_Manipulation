@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ASCII Art Lab</title>
+<style>
+  :root {
+    --background:#000;
+    --surface:#0d0d0d;
+    --surface-strong:#111;
+    --surface-contrast:#181818;
+    --foreground:#e3e3e3;
+    --muted:#555;
+    --muted-mid:#8a8a8a;
+    --muted-strong:#e0e0e0;
+    --border:#1a1a1a;
+    --ghost:#121212;
+    --focus:#fff;
+    --radius-panel:16px;
+    --radius-control:8px;
+    --shadow:inset 0 1px 0 #1a1a1a;
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0;
+    min-height:100vh;
+    background:var(--background);
+    color:var(--foreground);
+    font:14px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  }
+  button,
+  input,
+  select {
+    font:inherit;
+    color:inherit;
+  }
+  button {
+    cursor:pointer;
+  }
+  .page {
+    width:min(1680px, calc(100% - 24px));
+    height:100vh;
+    margin:0 auto;
+    padding:24px 0;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+  }
+  header {
+    display:flex;
+    align-items:center;
+    gap:18px;
+    padding:0 12px 2px;
+  }
+  .logo {
+    color:var(--foreground);
+    font:700 14px/18px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    letter-spacing:.08em;
+    text-decoration:none;
+  }
+  .mode {
+    display:flex;
+    align-items:center;
+    gap:4px;
+    border-radius:999px;
+    background:var(--surface);
+    padding:4px;
+    box-shadow:var(--shadow);
+  }
+  .mode button {
+    border:0;
+    border-radius:999px;
+    background:transparent;
+    color:var(--muted);
+    padding:6px 22px;
+    font-weight:500;
+  }
+  .mode button.on {
+    background:var(--surface-contrast);
+    color:var(--foreground);
+  }
+  .actions {
+    margin-left:auto;
+    display:flex;
+    align-items:center;
+    gap:16px;
+  }
+  .icon-btn {
+    border:0;
+    background:transparent;
+    color:var(--muted);
+    display:flex;
+    align-items:center;
+    gap:6px;
+    padding:4px;
+    font-size:13px;
+    font-weight:500;
+  }
+  .icon-btn:hover {
+    color:var(--muted-strong);
+  }
+  .theme-chip {
+    border:0;
+    border-radius:999px;
+    background:var(--surface);
+    box-shadow:var(--shadow);
+    color:var(--foreground);
+    width:30px;
+    height:30px;
+    font-weight:600;
+  }
+  .workspace {
+    min-height:0;
+    flex:1;
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 392px;
+    gap:12px;
+  }
+  .preview-panel,
+  .tool-panel {
+    border-radius:var(--radius-panel);
+    background:var(--surface);
+    box-shadow:var(--shadow);
+  }
+  .preview-panel {
+    min-height:0;
+    padding:16px;
+    display:flex;
+    flex-direction:column;
+  }
+  .panel-title {
+    margin:0 0 12px;
+    color:var(--muted);
+    font-size:12px;
+    font-weight:500;
+    letter-spacing:3px;
+    line-height:14px;
+    text-transform:uppercase;
+  }
+  .panel-title .cursor {
+    display:inline-block;
+    width:7px;
+    height:12px;
+    margin-left:4px;
+    background:var(--muted);
+    animation:blink 1s steps(1) infinite;
+    transform:translateY(2px);
+  }
+  @keyframes blink { 50% { opacity:0; } }
+  .stage {
+    min-height:0;
+    flex:1;
+    border-radius:8px;
+    background:
+      linear-gradient(45deg, #101010 25%, transparent 25%),
+      linear-gradient(-45deg, #101010 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #101010 75%),
+      linear-gradient(-45deg, transparent 75%, #101010 75%),
+      transparent;
+    background-size:24px 24px;
+    background-position:0 0, 0 12px, 12px -12px, -12px 0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:auto;
+    padding:20px;
+  }
+  canvas {
+    display:block;
+    max-width:100%;
+    max-height:100%;
+    width:auto;
+    height:auto;
+  }
+  .empty {
+    color:var(--muted);
+    text-align:center;
+    font-size:13px;
+  }
+  .tool-panel {
+    min-height:0;
+    overflow-y:auto;
+    padding-right:0;
+  }
+  .stack {
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .section {
+    border-radius:var(--radius-panel);
+    background:var(--surface);
+    box-shadow:var(--shadow);
+    padding:16px;
+  }
+  .section.dragging {
+    opacity:.55;
+  }
+  .section-head {
+    height:14px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:14px;
+  }
+  .head-left {
+    display:flex;
+    align-items:center;
+    gap:4px;
+  }
+  .drag {
+    border:0;
+    background:transparent;
+    color:var(--muted);
+    padding:4px;
+    cursor:grab;
+    touch-action:none;
+  }
+  .drag:active {
+    cursor:grabbing;
+  }
+  .drag svg {
+    width:12px;
+    height:12px;
+    display:block;
+  }
+  .section h2 {
+    margin:0;
+    color:var(--muted);
+    font-size:12px;
+    font-weight:500;
+    letter-spacing:3px;
+    line-height:14px;
+    text-transform:uppercase;
+  }
+  .reset-small {
+    border:0;
+    background:transparent;
+    color:var(--muted);
+    padding:4px;
+  }
+  .upload {
+    width:100%;
+    border:0;
+    background:transparent;
+    color:inherit;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:0;
+    text-align:left;
+  }
+  .plus {
+    width:40px;
+    height:40px;
+    border-radius:8px;
+    background:var(--surface-contrast);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:var(--muted-strong);
+    font-size:26px;
+    line-height:1;
+  }
+  .upload strong {
+    display:block;
+    font-size:14px;
+    font-weight:500;
+  }
+  .upload span {
+    display:block;
+    color:var(--muted-mid);
+    font-size:13px;
+  }
+  .seg {
+    display:grid;
+    gap:6px;
+  }
+  .seg.cols-4 { grid-template-columns:repeat(4, 1fr); }
+  .seg.cols-3 { grid-template-columns:repeat(3, 1fr); }
+  .seg.cols-2 { grid-template-columns:repeat(2, 1fr); }
+  .seg button,
+  .full,
+  select,
+  input[type=text],
+  input[type=number],
+  input[type=color] {
+    min-height:32px;
+    border:0;
+    border-radius:var(--radius-control);
+    background:var(--ghost);
+    color:var(--muted);
+    padding:6px 10px;
+    font-weight:500;
+  }
+  .seg button.on,
+  .full.primary {
+    background:var(--surface-contrast);
+    color:var(--foreground);
+  }
+  input[type=text] {
+    width:100%;
+    color:var(--foreground);
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  .field {
+    display:flex;
+    flex-direction:column;
+    gap:7px;
+    margin-top:12px;
+  }
+  .field:first-child {
+    margin-top:0;
+  }
+  .field-row {
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    color:var(--muted-strong);
+    font-weight:500;
+  }
+  .field-row span:last-child {
+    color:var(--muted);
+    font-variant-numeric:tabular-nums;
+  }
+  input[type=range] {
+    width:100%;
+    accent-color:var(--foreground);
+  }
+  input[type=color] {
+    width:100%;
+    padding:3px;
+  }
+  .two {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+  }
+  .full {
+    width:100%;
+    margin-top:8px;
+  }
+  .hidden {
+    display:none !important;
+  }
+  #textOut {
+    width:100%;
+    min-height:150px;
+    margin-top:12px;
+    border:0;
+    border-radius:var(--radius-control);
+    background:var(--surface-contrast);
+    color:var(--foreground);
+    padding:10px;
+    font:10px/1 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    resize:vertical;
+  }
+  @media (max-width:980px) {
+    .page {
+      height:auto;
+    }
+    .workspace {
+      grid-template-columns:1fr;
+    }
+    .preview-panel {
+      height:62vh;
+      min-height:420px;
+    }
+  }
+  @media (max-width:620px) {
+    .page {
+      width:min(100% - 18px, 1680px);
+      padding:14px 0;
+    }
+    header {
+      flex-wrap:wrap;
+      padding:0 4px 2px;
+    }
+    .mode {
+      order:3;
+      width:100%;
+    }
+    .mode button {
+      flex:1;
+    }
+    .actions {
+      gap:8px;
+    }
+    .icon-btn span {
+      display:none;
+    }
+    .seg.cols-4,
+    .seg.cols-3 {
+      grid-template-columns:1fr 1fr;
+    }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <header>
+    <a class="logo" href="../">IMG LABS</a>
+    <div class="mode" aria-label="Mode">
+      <button class="on" data-mode="generate">Generate</button>
+      <button data-mode="compose">Compose</button>
+    </div>
+    <div class="actions">
+      <button class="icon-btn" id="resetAll" type="button" aria-label="Reset">Reset</button>
+      <button class="icon-btn" id="invertTop" type="button" aria-label="Invert">Invert</button>
+      <button class="theme-chip" type="button" aria-label="Theme">L</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <section class="preview-panel">
+      <h1 class="panel-title">Preview<span class="cursor" aria-hidden="true"></span></h1>
+      <div class="stage" id="dropZone">
+        <canvas id="out" class="hidden"></canvas>
+        <div class="empty" id="empty">Upload an image to generate ASCII art.</div>
+      </div>
+    </section>
+
+    <aside class="tool-panel" aria-label="ASCII settings">
+      <div class="stack" id="stack">
+        <section class="section" data-panel="source">
+          <div class="section-head">
+            <div class="head-left"><button class="drag" draggable="true" type="button" aria-label="Move panel"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button><h2>Source</h2></div>
+          </div>
+          <input id="file" class="hidden" type="file" accept="image/*,.svg,.gif" />
+          <button class="upload" id="uploadBtn" type="button">
+            <span class="plus">+</span>
+            <span><strong>Upload image</strong><span>Drop or browse - PNG, JPG, WEBP, SVG, GIF</span></span>
+          </button>
+        </section>
+
+        <section class="section" data-panel="ramp">
+          <div class="section-head">
+            <div class="head-left"><button class="drag" draggable="true" type="button" aria-label="Move panel"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button><h2>Character ramp</h2></div>
+            <button class="reset-small" type="button" data-reset="ramp">Reset</button>
+          </div>
+          <div class="seg cols-4" id="presetBtns">
+            <button class="on" data-ramp="@%#*+=-:. ">Standard</button>
+            <button data-ramp="█▓▒░ ">Blocks</button>
+            <button data-ramp="$@B%8&WM#*oahkbdpqwmZO0QLCJUYXzcvunxrjft/\\|()1{}[]?-_+~<>i!lI;:,^`. ">Detailed</button>
+            <button data-ramp="@#-. ">Minimal</button>
+          </div>
+          <div class="field">
+            <input id="ramp" type="text" value="@%#*+=-:. " spellcheck="false" />
+          </div>
+          <div class="field">
+            <div class="field-row"><span>Density bias</span><span id="densityV">1.00</span></div>
+            <input id="density" type="range" min="0.2" max="3" step="0.05" value="1" />
+          </div>
+          <button class="full" id="randomRamp" type="button">Generate random</button>
+        </section>
+
+        <section class="section" data-panel="sampling">
+          <div class="section-head">
+            <div class="head-left"><button class="drag" draggable="true" type="button" aria-label="Move panel"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button><h2>Sampling</h2></div>
+            <button class="reset-small" type="button" data-reset="sampling">Reset</button>
+          </div>
+          <div class="field">
+            <div class="field-row"><span>Width</span><span id="widthV">120</span></div>
+            <input id="cols" type="range" min="24" max="220" value="120" />
+          </div>
+          <div class="field">
+            <div class="field-row"><span>Height scale</span><span id="heightScaleV">1.00</span></div>
+            <input id="heightScale" type="range" min="0.35" max="1.8" step="0.05" value="1" />
+          </div>
+          <div class="field">
+            <div class="field-row"><span>Pixelate</span><span id="pixelateV">0</span></div>
+            <input id="pixelate" type="range" min="0" max="12" value="0" />
+          </div>
+        </section>
+
+        <section class="section" data-panel="tone">
+          <div class="section-head">
+            <div class="head-left"><button class="drag" draggable="true" type="button" aria-label="Move panel"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button><h2>Tone</h2></div>
+            <button class="reset-small" type="button" data-reset="tone">Reset</button>
+          </div>
+          <div class="field">
+            <div class="field-row"><span>Brightness</span><span id="brightnessV">8</span></div>
+            <input id="brightness" type="range" min="-80" max="80" value="8" />
+          </div>
+          <div class="field">
+            <div class="field-row"><span>Contrast</span><span id="contrastV">22</span></div>
+            <input id="contrast" type="range" min="-80" max="120" value="22" />
+          </div>
+          <div class="field">
+            <div class="field-row"><span>Gamma</span><span id="gammaV">1.00</span></div>
+            <input id="gamma" type="range" min="0.25" max="3" step="0.05" value="1" />
+          </div>
+        </section>
+
+        <section class="section" data-panel="mix">
+          <div class="section-head">
+            <div class="head-left"><button class="drag" draggable="true" type="button" aria-label="Move panel"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button><h2>Mix mode</h2></div>
+          </div>
+          <div class="seg cols-3" id="mixBtns">
+            <button class="on" data-mix="mono">Mono</button>
+            <button data-mix="multi">Multi</button>
+            <button data-mix="original">Original</button>
+          </div>
+        </section>
+
+        <section class="section" data-panel="background">
+          <div class="section-head">
+            <div class="head-left"><button class="drag" draggable="true" type="button" aria-label="Move panel"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button><h2>Background</h2></div>
+          </div>
+          <div class="seg cols-2" id="bgBtns">
+            <button data-bg="transparent">Transparent</button>
+            <button class="on" data-bg="solid">Solid</button>
+          </div>
+          <div class="field">
+            <div class="field-row"><span>Background color</span></div>
+            <input id="bgColor" type="color" value="#000000" />
+          </div>
+          <div class="field">
+            <select id="blend">
+              <option>Normal</option><option>Multiply</option><option>Screen</option><option>Overlay</option>
+              <option>Darken</option><option>Lighten</option><option>Color Dodge</option><option>Color Burn</option>
+              <option>Soft Light</option><option>Hard Light</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="section" data-panel="export">
+          <div class="section-head">
+            <div class="head-left"><button class="drag" draggable="true" type="button" aria-label="Move panel"><svg viewBox="0 0 16 16" fill="currentColor"><circle cx="5" cy="3" r="1.5"/><circle cx="11" cy="3" r="1.5"/><circle cx="5" cy="8" r="1.5"/><circle cx="11" cy="8" r="1.5"/><circle cx="5" cy="13" r="1.5"/><circle cx="11" cy="13" r="1.5"/></svg></button><h2>Export</h2></div>
+          </div>
+          <div class="seg cols-3" id="scaleBtns">
+            <button class="on" data-scale="1">1x</button><button data-scale="2">2x</button><button data-scale="3">3x</button>
+          </div>
+          <div class="seg cols-3" id="formatBtns" style="margin-top:8px">
+            <button class="on" data-format="png">PNG</button><button data-format="svg">SVG</button><button data-format="txt">TXT</button>
+          </div>
+          <button class="full primary" id="download" type="button">Download .PNG</button>
+          <button class="full" id="copyText" type="button">Copy text</button>
+          <textarea id="textOut" readonly spellcheck="false"></textarea>
+        </section>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script>
+const S = {
+  ramp:'@%#*+=-:. ',
+  density:1,
+  cols:120,
+  heightScale:1,
+  pixelate:0,
+  brightness:8,
+  contrast:22,
+  gamma:1,
+  invert:false,
+  mix:'mono',
+  bg:'solid',
+  bgColor:'#000000',
+  scale:1,
+  format:'png'
+};
+
+const out = document.getElementById('out');
+const ctx = out.getContext('2d');
+const sample = document.createElement('canvas');
+const sctx = sample.getContext('2d', { willReadFrequently:true });
+const empty = document.getElementById('empty');
+const textOut = document.getElementById('textOut');
+let image = null;
+let lastAscii = [];
+let lastCells = [];
+
+function clamp(v, min=0, max=255) {
+  return Math.max(min, Math.min(max, v));
+}
+
+function tone(v) {
+  v = clamp(v + S.brightness, 0, 255);
+  const c = 1 + S.contrast / 100;
+  v = clamp((v - 128) * c + 128, 0, 255);
+  v = 255 * Math.pow(v / 255, 1 / S.gamma);
+  if (S.invert) v = 255 - v;
+  return clamp(v, 0, 255);
+}
+
+function charFor(lum) {
+  const ramp = S.ramp || '@%#*+=-:. ';
+  const t = Math.pow(lum / 255, S.density);
+  const idx = clamp(Math.round(t * (ramp.length - 1)), 0, ramp.length - 1);
+  return ramp[idx] || ' ';
+}
+
+function render() {
+  syncLabels();
+  if (!image) return renderPlaceholder();
+
+  const cols = S.cols;
+  const ar = image.naturalWidth / image.naturalHeight;
+  const rows = Math.max(1, Math.round(cols / ar * S.heightScale * .52));
+  sample.width = cols;
+  sample.height = rows;
+  sctx.imageSmoothingEnabled = S.pixelate <= 0;
+  sctx.clearRect(0, 0, cols, rows);
+  if (S.pixelate > 0) {
+    const smallW = Math.max(1, Math.round(cols / (S.pixelate + 1)));
+    const smallH = Math.max(1, Math.round(rows / (S.pixelate + 1)));
+    const tiny = document.createElement('canvas');
+    tiny.width = smallW;
+    tiny.height = smallH;
+    const tctx = tiny.getContext('2d');
+    tctx.drawImage(image, 0, 0, smallW, smallH);
+    sctx.imageSmoothingEnabled = false;
+    sctx.drawImage(tiny, 0, 0, cols, rows);
+  } else {
+    sctx.drawImage(image, 0, 0, cols, rows);
+  }
+
+  const data = sctx.getImageData(0, 0, cols, rows).data;
+  const cellW = 8 * S.scale;
+  const cellH = 10 * S.scale;
+  out.width = cols * cellW;
+  out.height = rows * cellH;
+  ctx.clearRect(0, 0, out.width, out.height);
+  if (S.bg === 'solid') {
+    ctx.fillStyle = S.bgColor;
+    ctx.fillRect(0, 0, out.width, out.height);
+  }
+  ctx.font = `${10 * S.scale}px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+  ctx.textBaseline = 'top';
+  ctx.globalCompositeOperation = blendMode(S.blend);
+
+  lastAscii = [];
+  lastCells = [];
+  for (let y = 0; y < rows; y++) {
+    let line = '';
+    for (let x = 0; x < cols; x++) {
+      const i = (y * cols + x) * 4;
+      const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3] / 255;
+      let lum = (0.299 * r + 0.587 * g + 0.114 * b) * a;
+      lum = tone(lum);
+      const ch = charFor(lum);
+      line += ch;
+      let color = '#e3e3e3';
+      if (S.mix === 'multi') color = `rgb(${r},${g},${b})`;
+      if (S.mix === 'original') {
+        const v = Math.round(lum);
+        color = `rgb(${v},${v},${v})`;
+      }
+      ctx.fillStyle = color;
+      ctx.fillText(ch, x * cellW, y * cellH);
+      lastCells.push({ x, y, ch, color });
+    }
+    lastAscii.push(line);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  textOut.value = lastAscii.join('\n');
+  empty.classList.add('hidden');
+  out.classList.remove('hidden');
+}
+
+function renderPlaceholder() {
+  textOut.value = '';
+  out.classList.add('hidden');
+  empty.classList.remove('hidden');
+}
+
+function blendMode(label) {
+  const map = {
+    Normal:'source-over', Multiply:'multiply', Screen:'screen', Overlay:'overlay',
+    Darken:'darken', Lighten:'lighten', 'Color Dodge':'color-dodge',
+    'Color Burn':'color-burn', 'Soft Light':'soft-light', 'Hard Light':'hard-light'
+  };
+  return map[label] || 'source-over';
+}
+
+function syncLabels() {
+  document.getElementById('densityV').textContent = Number(S.density).toFixed(2);
+  document.getElementById('widthV').textContent = S.cols;
+  document.getElementById('heightScaleV').textContent = Number(S.heightScale).toFixed(2);
+  document.getElementById('pixelateV').textContent = S.pixelate;
+  document.getElementById('brightnessV').textContent = S.brightness;
+  document.getElementById('contrastV').textContent = S.contrast;
+  document.getElementById('gammaV').textContent = Number(S.gamma).toFixed(2);
+  document.getElementById('download').textContent = `Download .${S.format.toUpperCase()}`;
+}
+
+function setSeg(rootId, key, attr) {
+  document.getElementById(rootId).addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    [...e.currentTarget.children].forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    S[key] = b.dataset[attr];
+    render();
+  });
+}
+
+setSeg('mixBtns', 'mix', 'mix');
+setSeg('bgBtns', 'bg', 'bg');
+setSeg('scaleBtns', 'scale', 'scale');
+setSeg('formatBtns', 'format', 'format');
+
+document.getElementById('presetBtns').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  S.ramp = b.dataset.ramp;
+  document.getElementById('ramp').value = S.ramp;
+  render();
+});
+
+for (const [id, key] of [['density','density'], ['cols','cols'], ['heightScale','heightScale'], ['pixelate','pixelate'], ['brightness','brightness'], ['contrast','contrast'], ['gamma','gamma']]) {
+  document.getElementById(id).addEventListener('input', e => {
+    S[key] = key === 'cols' || key === 'pixelate' || key === 'brightness' || key === 'contrast' ? +e.target.value : parseFloat(e.target.value);
+    render();
+  });
+}
+
+document.getElementById('ramp').addEventListener('input', e => {
+  S.ramp = e.target.value;
+  render();
+});
+document.getElementById('bgColor').addEventListener('input', e => {
+  S.bgColor = e.target.value;
+  render();
+});
+document.getElementById('blend').addEventListener('change', e => {
+  S.blend = e.target.value;
+  render();
+});
+document.getElementById('invertTop').addEventListener('click', () => {
+  S.invert = !S.invert;
+  render();
+});
+document.getElementById('resetAll').addEventListener('click', () => {
+  Object.assign(S, { ramp:'@%#*+=-:. ', density:1, cols:120, heightScale:1, pixelate:0, brightness:8, contrast:22, gamma:1, invert:false, mix:'mono', bg:'solid', bgColor:'#000000', scale:1, format:'png' });
+  document.getElementById('ramp').value = S.ramp;
+  for (const key of ['density','cols','heightScale','pixelate','brightness','contrast','gamma']) document.getElementById(key).value = S[key];
+  document.getElementById('bgColor').value = S.bgColor;
+  setActive('mixBtns', 'mix', S.mix);
+  setActive('bgBtns', 'bg', S.bg);
+  setActive('scaleBtns', 'scale', String(S.scale));
+  setActive('formatBtns', 'format', S.format);
+  render();
+});
+
+function setActive(id, attr, value) {
+  document.querySelectorAll(`#${id} button`).forEach(btn => btn.classList.toggle('on', btn.dataset[attr] === value));
+}
+
+document.getElementById('randomRamp').addEventListener('click', () => {
+  const chars = '@#$%&WMNXK0Okxdolc:;,. ';
+  S.ramp = [...chars].sort(() => Math.random() - .5).join('');
+  document.getElementById('ramp').value = S.ramp;
+  render();
+});
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-reset]');
+  if (!b) return;
+  const group = b.dataset.reset;
+  if (group === 'ramp') {
+    S.ramp = '@%#*+=-:. ';
+    S.density = 1;
+    document.getElementById('ramp').value = S.ramp;
+    document.getElementById('density').value = S.density;
+  }
+  if (group === 'sampling') {
+    Object.assign(S, { cols:120, heightScale:1, pixelate:0 });
+    for (const key of ['cols','heightScale','pixelate']) document.getElementById(key).value = S[key];
+  }
+  if (group === 'tone') {
+    Object.assign(S, { brightness:8, contrast:22, gamma:1 });
+    for (const key of ['brightness','contrast','gamma']) document.getElementById(key).value = S[key];
+  }
+  render();
+});
+
+document.getElementById('uploadBtn').addEventListener('click', () => document.getElementById('file').click());
+document.getElementById('file').addEventListener('change', e => loadFile(e.target.files[0]));
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => e.preventDefault());
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  loadFile(e.dataTransfer.files[0]);
+});
+
+function loadFile(file) {
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    image = img;
+    URL.revokeObjectURL(url);
+    render();
+  };
+  img.src = url;
+}
+
+document.getElementById('download').addEventListener('click', () => {
+  if (!image) return;
+  if (S.format === 'txt') return downloadText();
+  if (S.format === 'svg') return downloadSvg();
+  const a = document.createElement('a');
+  a.href = out.toDataURL('image/png');
+  a.download = 'ascii-art.png';
+  a.click();
+});
+document.getElementById('copyText').addEventListener('click', async e => {
+  await navigator.clipboard.writeText(textOut.value);
+  e.target.textContent = 'Copied';
+  setTimeout(() => e.target.textContent = 'Copy text', 1200);
+});
+
+function downloadText() {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([textOut.value], { type:'text/plain' }));
+  a.download = 'ascii-art.txt';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function downloadSvg() {
+  const cellW = 8 * S.scale;
+  const cellH = 10 * S.scale;
+  const bg = S.bg === 'solid' ? `<rect width="100%" height="100%" fill="${S.bgColor}"/>` : '';
+  const text = lastCells.map(c => `<text x="${c.x * cellW}" y="${c.y * cellH + 9 * S.scale}" fill="${c.color}" font-size="${10 * S.scale}" font-family="monospace">${escapeXml(c.ch)}</text>`).join('');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${out.width}" height="${out.height}" viewBox="0 0 ${out.width} ${out.height}">${bg}${text}</svg>`;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([svg], { type:'image/svg+xml' }));
+  a.download = 'ascii-art.svg';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function escapeXml(s) {
+  return s.replace(/[<>&"']/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[ch]));
+}
+
+const stack = document.getElementById('stack');
+let dragItem = null;
+stack.addEventListener('dragstart', e => {
+  if (!e.target.closest('.drag')) {
+    e.preventDefault();
+    return;
+  }
+  dragItem = e.target.closest('.section');
+  if (!dragItem) return;
+  dragItem.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+});
+stack.addEventListener('dragend', () => {
+  if (dragItem) dragItem.classList.remove('dragging');
+  dragItem = null;
+});
+stack.addEventListener('dragover', e => {
+  e.preventDefault();
+  const after = getAfterElement(stack, e.clientY);
+  if (!dragItem) return;
+  if (after == null) stack.appendChild(dragItem);
+  else stack.insertBefore(dragItem, after);
+});
+function getAfterElement(container, y) {
+  const items = [...container.querySelectorAll('.section:not(.dragging)')];
+  return items.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) return { offset, element:child };
+    return closest;
+  }, { offset:Number.NEGATIVE_INFINITY }).element;
+}
+
+document.querySelector('.mode').addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  document.querySelectorAll('.mode button').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+});
+
+S.blend = 'Normal';
+syncLabels();
+</script>
+</body>
+</html>
